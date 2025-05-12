@@ -1,0 +1,52 @@
+name: Release CI/CD
+
+on:
+  release:
+    types: [published]
+
+env:
+  IMAGE_NAME: riazul/flask-weather-api
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Extract version from release tag
+      id: get_version
+      run: echo "RELEASE_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+    - name: Verify version matches app.py
+      run: |
+        APP_VERSION=$(grep -oP '(?<="version": ")[^"]+' app.py)
+        if [ "$APP_VERSION" != "$RELEASE_VERSION" ]; then
+          echo "Version mismatch: app.py version is $APP_VERSION, release tag is $RELEASE_VERSION"
+          exit 1
+        fi
+
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.riazul }}
+        password: ${{ secrets.dckr_pat_jSkwKdMi3znABwq7VD9yM2kei8A }}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - name: Deploy to server
+        run: |
+          echo "Use SSH or a deployment tool like Ansible/Kubernetes to pull the new image and reload"
